@@ -35,8 +35,8 @@ func (s *UserService) FindUser(condition interface{}) (*model.User, error) {
 }
 
 // FindUsers finds all users
-func (s *UserService) FindUsers(sortOrders []string) ([]model.User, error) {
-	users, err := s.userRepo.FindUsers(&model.User{}, 0, orm.NoLimit, sortOrders)
+func (s *UserService) FindUsers(condition interface{}, sortOrders []string) ([]model.User, error) {
+	users, err := s.userRepo.FindUsers(condition, 0, orm.NoLimit, sortOrders)
 	if err != nil {
 		return nil, NewSvcError(ErrorCodeDB, err, "Failed to find users")
 	}

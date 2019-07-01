@@ -10,14 +10,27 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type endPoint struct {
+	login  string
+	users  string
+	userid string
+}
+
+// EndPoint presents boards endpoint
+var EndPoint = endPoint{
+	login:  "/login",
+	users:  "/users",
+	userid: "userid",
+}
+
 // RegisterRoute registers API endpoints for users
-func RegisterRoute(route *gin.RouterGroup) (err error) {
-	route.POST("/login", login)
-	route.GET("/users", list)
-	route.POST("/users", create)
-	route.GET("/users/:userid", get)
-	route.PUT("/users/:userid", update)
-	route.DELETE("/users/:userid", delete)
+func (p *endPoint) RegisterRoute(route *gin.RouterGroup) (err error) {
+	route.POST(p.login, login)
+	route.GET(p.users, list)
+	route.POST(p.users, create)
+	route.GET(p.users+"/:"+p.userid, get)
+	route.PUT(p.users+"/:"+p.userid, update)
+	route.DELETE(p.users+"/:"+p.userid, delete)
 	return
 }
 
@@ -41,7 +54,7 @@ func login(c *gin.Context) {
 func list(c *gin.Context) {
 	tx := orm.GetDB() // No transction
 	srvc := service.NewUserService(tx)
-	users, serr := srvc.FindUsers([]string{"name"})
+	users, serr := srvc.FindUsers(&model.User{}, []string{"name"})
 	if serr != nil {
 		api.SetErrorStatus(c, serr)
 		return
@@ -89,7 +102,7 @@ func get(c *gin.Context) {
 }
 
 func findUserByPathParameter(c *gin.Context, srvc *service.UserService) (find *model.User, serr error) {
-	userID, serr := api.GetPathParameter(c, "userid")
+	userID, serr := api.GetPathParameter(c, EndPoint.userid)
 	if serr != nil {
 		api.SetErrorStatus(c, serr)
 		return nil, serr

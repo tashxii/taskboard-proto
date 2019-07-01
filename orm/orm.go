@@ -3,6 +3,7 @@ package orm
 import (
 	"errors"
 	"math"
+	"reflect"
 
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/sqlite" //to load dialect
@@ -23,6 +24,7 @@ func Init(databasePath string) (err error) {
 		return
 	}
 	instance = opened
+	instance.DB().SetMaxOpenConns(5)
 	instance.DB().SetMaxIdleConns(5)
 	return
 }
@@ -39,4 +41,28 @@ func Migrate(models ...interface{}) error {
 		return errors.New("Database is not initilazed. Must call orm.Init() before calling this method")
 	}
 	return db.AutoMigrate(models...).Error
+}
+
+// TableName rerturns table name of model
+func TableName(model interface{}) string {
+	return gorm.ToTableName(reflect.TypeOf(model).Name())
+}
+
+// ColumnNames returns column names of model
+func ColumnNames(model interface{}) []string {
+	result := make([]string, 0)
+	t := reflect.TypeOf(model)
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		if f.Type.Kind() != reflect.Struct {
+			name := f.Name
+			result = append(result, gorm.ToColumnName(name))
+		}
+	}
+	return result
+}
+
+// IsRecordNotFoundError checks whether err is due to no record found
+func IsRecordNotFoundError(err error) bool {
+	return gorm.IsRecordNotFoundError(err)
 }

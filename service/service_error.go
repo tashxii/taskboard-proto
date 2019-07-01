@@ -28,7 +28,7 @@ type SvcError struct {
 	Code    ErrorCode // Error code
 	Message string    // message
 	Details []string  // details
-	Cause   error     // Cause error, when not exists, nil is set
+	Cause   error     // Cause error, when not exists, set nil
 }
 
 // SvcError returns the message of error
@@ -71,7 +71,7 @@ func NewBadRequestError(err error) error {
 
 // NewPathParameterError creates new server error of url path parameter
 func NewPathParameterError(key string) error {
-	return NewSvcErrorf(ErrorCodeBadRequest, nil, "Path parameter [%s] is not specifed in URL", key)
+	return NewSvcErrorf(ErrorCodeBadRequest, nil, "Path parameter [%s] is not specifed in api path", key)
 }
 
 // NewDBCommitError creates new server error of commit transaction

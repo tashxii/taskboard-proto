@@ -15,7 +15,6 @@ import (
 // IsClosed    bool         `gorm:"not null"`
 // CreatedDate time.Time    `gorm:"not null"`
 // Version     int          `gorm:"not null"` // Version for optimistic lock
-// TaskEntries []*TaskEntry `gorm:"-"`        // Ignore, fetch by service layer when they needed
 
 type boardResponse struct {
 	ID          string `json:"id"`
@@ -29,7 +28,6 @@ type boardResponse struct {
 
 type createRequest struct {
 	Name     string `json:"name"`
-	IsSystem bool   `json:"isSystem"`
 	IsClosed bool   `json:"isClosed"`
 }
 
@@ -39,6 +37,10 @@ type updateRequest struct {
 	IsSystem bool   `json:"isSystem"`
 	IsClosed bool   `json:"isClosed"`
 	Version  int    `json:"version"`
+}
+
+type updateBoardOrdersRequest struct {
+	BoardIDs []string `json:"boardIDs"`
 }
 
 func convertBoardResponse(board *model.Board) *boardResponse {
@@ -69,7 +71,7 @@ func getBoardByCreateRequest(c *gin.Context) (*model.Board, error) {
 	}
 	board := model.NewBoard(
 		req.Name,
-		req.IsSystem,
+		false,
 		req.IsClosed,
 		time.Now().UTC(),
 	)
@@ -83,11 +85,19 @@ func getBoardByUpdateRequest(c *gin.Context, find *model.Board) (*model.Board, e
 		return nil, service.NewBadRequestError(err)
 	}
 	return &model.Board{
-		ID:          find.ID,
-		Name:        req.Name,
-		IsSystem:    req.IsSystem,
-		IsClosed:    req.IsClosed,
-		Version:     req.Version,
-		TaskEntries: []*model.TaskEntry{},
+		ID:       find.ID,
+		Name:     req.Name,
+		IsSystem: req.IsSystem,
+		IsClosed: req.IsClosed,
+		Version:  req.Version,
 	}, nil
+}
+
+func getUpdateBoardOrdersRequest(c *gin.Context) (*updateBoardOrdersRequest, error) {
+	var req *updateBoardOrdersRequest
+	err := c.ShouldBindJSON(&req)
+	if err != nil {
+		return nil, service.NewBadRequestError(err)
+	}
+	return req, nil
 }

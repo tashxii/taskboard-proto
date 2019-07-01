@@ -4,9 +4,13 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"taskboard/controller/api"
+	"taskboard/controller/boards"
+	"taskboard/controller/tasks"
 	"taskboard/controller/users"
 	"taskboard/model"
 	"taskboard/orm"
+	"taskboard/service"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -27,10 +31,21 @@ func main() {
 		&model.User{},
 		&model.Task{},
 		&model.Board{},
-		&model.TaskEntry{},
 	)
 	if err != nil {
 		fmt.Printf("Failed to update tables. error:%+v\n", err)
+		return
+	}
+
+	// Create system boards(Icebox, Todo, Doing, Done)
+	tx := orm.GetDB().Begin()
+	srvc := service.NewBoardService(tx)
+	if err = srvc.CreateSystemBoards(); err != nil {
+		fmt.Printf("Failed to create system boards. error:%+v\n", err)
+		api.Rollback(tx)
+		return
+	}
+	if err = api.Commit(tx); err != nil {
 		return
 	}
 
@@ -41,22 +56,31 @@ func main() {
 	//config.AllowHeaders = []string{"Content-Type"}
 	//router.Use(cors.New(config))
 	router.Use(cors.Default())
+	// Include static/avators
+	router.Static("/taskboard/static", "./static")
+
 	// Register api path
 	routeGroup := router.Group("/taskboard")
-	users.RegisterRoute(routeGroup)
+	users.EndPoint.RegisterRoute(routeGroup)
+	boards.EndPoint.RegisterRoute(routeGroup)
+	tasks.EndPoint.RegisterRoute(routeGroup)
 
-	// Set listening port
-	port := getListeningPort()
+	// Set listening host:port
+	url := getListeningURL()
 	// Start server
-	fmt.Printf("Taskboard api server is starting... listening port:%d\n", port)
-	err = router.Run(fmt.Sprintf(":%d", port))
+	fmt.Printf("Taskboard api server is starting... listening %s\n", url)
+	err = router.Run(url)
 	if err != nil {
 		fmt.Printf("Failed to start api server. error:%+v\n", err)
 		return
 	}
 }
 
-func getListeningPort() int {
+func getListeningURL() string {
+	host := os.Getenv("TASKBOARD_API_SERVER_HOST")
+	if host == "" {
+		fmt.Println("Environment variable [TASKBOARD_API_SERVER_HOST] is not set or invalid. localhost is used as default")
+	}
 	portEnv := os.Getenv("TASKBOARD_API_SERVER_PORT")
 	port := 0
 	if portEnv != "" {
@@ -69,5 +93,5 @@ func getListeningPort() int {
 		fmt.Println("Environment variable [TASKBOARD_API_SERVER_PORT] is not set or invalid, 7000 port is used as defalt.")
 		port = 7000
 	}
-	return port
+	return fmt.Sprintf("%s:%d", host, port)
 }

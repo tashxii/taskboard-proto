@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"database/sql"
 	"sync"
 	"taskboard/model"
 	"taskboard/orm"
@@ -85,7 +86,18 @@ func (repo *TaskRepository) DeleteTask(task *model.Task) error {
 
 // CreateTasks inserts new Task records.
 func (repo *TaskRepository) CreateTasks(tasks []*model.Task) (err error) {
+	lockTask.Lock()
+	defer lockTask.Unlock()
+
 	for _, task := range tasks {
+		max := 0
+		if task.BoardID != "" {
+			max, err = repo.MaxTaskDispOrder(&model.Task{BoardID: task.BoardID})
+			if err != nil {
+				return
+			}
+		}
+		task.DispOrder = max + 1
 		err = repo.tx.Create(task).Error
 		if err != nil {
 			return
@@ -130,7 +142,69 @@ func (repo *TaskRepository) DeleteTasks(tasks []*model.Task) (err error) {
 	return
 }
 
-// ClearBoardID clears board_id field which matches specified board id
-func (repo *TaskRepository) ClearBoardID(boardID string) (err error) {
-	return repo.tx.Table("tasks").Where("board_id = ?", boardID).UpdateColumn("board_id = ?", "").Error
+// MaxTaskDispOrder return max of disp order matching specified condition
+func (repo *TaskRepository) MaxTaskDispOrder(condition interface{}) (max int, err error) {
+	var out sql.NullInt64
+	err = repo.tx.Model(&model.Task{}).Select("max(disp_order)").
+		Where(condition).Row().Scan(&out)
+	if err != nil {
+		return
+	}
+	if !out.Valid {
+		// no row selected -> returns 0
+		return
+	}
+	return int(out.Int64), nil
+}
+
+// MoveToIceboxBoard move tasks to icebox board which matches specified board id
+func (repo *TaskRepository) MoveToIceboxBoard(boardID string) (err error) {
+	lockTask.Lock()
+	defer lockTask.Unlock()
+	max, err := repo.MaxTaskDispOrder(&model.Task{BoardID: model.SystemBoardIcebox.ID})
+	err = repo.tx.Model(&model.Task{}).Where("board_id = ?", boardID).
+		Update("disp_order", gorm.Expr("disp_order + ?", max)).Error
+	if err != nil {
+		return
+	}
+	return repo.tx.Model(&model.Task{}).Where("board_id = ?", boardID).
+		Update(&model.Task{BoardID: model.SystemBoardIcebox.ID}).Error
+}
+
+// MoveTaskDispOrders changes task order position.
+func (repo *TaskRepository) MoveTaskDispOrders(
+	taskID, fromBoardID string, fromDispOrder int,
+	toBoardID string, toDispOrder int,
+) (err error) {
+	if fromBoardID == toBoardID {
+		low := fromDispOrder     // ex) 1
+		high := toDispOrder      // ex) 3
+		expr := "disp_order - 1" // a1 b2 c3 d4 => b1 c2 a3 d4
+		if fromDispOrder < toDispOrder {
+			high = fromDispOrder    // ex) 3
+			low = toDispOrder       // ex) 1
+			expr = "disp_order + 1" // a1 b2 c3 d4 => c1 a2 b3 d4
+		}
+		err = repo.tx.Model(&model.Task{}).
+			Where("board_id = ? and disp_order > ? and disp_order <= ?", fromBoardID, low, high).
+			Update("disp_order", gorm.Expr(expr)).Error
+	} else {
+		// ex) from=3 to=2
+		// a1 b2 c3 d4 e5  => a1 b2 d3 e4
+		// x1 y2 z3        => x1 c2 y3 z4
+		// shift - 1 (remove form source board order)
+		err = repo.tx.Model(&model.Task{}).Where("board_id = ? and disp_order > ?", fromBoardID, fromDispOrder).
+			Update("disp_order", gorm.Expr("disp_order - 1")).Error
+		if err != nil {
+			return
+		}
+		// shift + 1 (insert to destination board order)
+		err = repo.tx.Model(&model.Task{}).Where("board_id = ? and disp_order >= ?", toBoardID, toDispOrder).
+			Update("disp_order", gorm.Expr("disp_order + 1")).Error
+		if err != nil {
+			return
+		}
+	}
+	// move
+	return repo.tx.Model(&model.Task{}).Where("task_id = ?", taskID).Update(&model.Task{DispOrder: toDispOrder}).Error
 }

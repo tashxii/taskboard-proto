@@ -85,8 +85,17 @@ func (repo *BoardRepository) DeleteBoard(board *model.Board) error {
 
 // CreateBoards inserts new Board records.
 func (repo *BoardRepository) CreateBoards(boards []*model.Board) (err error) {
+	lockBoard.Lock()
+	defer lockBoard.Unlock()
+
+	count, err := repo.CountBoards(&model.Board{})
+	if err != nil {
+		return
+	}
 	for _, board := range boards {
 		err = repo.tx.Create(board).Error
+		count++
+		board.DispOrder = count
 		if err != nil {
 			return
 		}
@@ -128,4 +137,16 @@ func (repo *BoardRepository) DeleteBoards(boards []*model.Board) (err error) {
 		}
 	}
 	return
+}
+
+// UpdateBoardOrders changes display orders of boards
+func (repo *BoardRepository) UpdateBoardOrders(boardIDs []string) (err error) {
+	for i, boardID := range boardIDs {
+		err = repo.tx.Model(&model.Board{}).Where("id = ?", boardID).
+			Update(model.Board{DispOrder: i}).Error
+		if err != nil {
+			return
+		}
+	}
+	return nil
 }

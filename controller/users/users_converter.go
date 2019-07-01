@@ -40,12 +40,12 @@ type updateRequest struct {
 }
 
 func getLoginRequest(c *gin.Context) (*loginRequest, error) {
-	var req *loginRequest
+	var req loginRequest
 	err := c.ShouldBindJSON(&req)
 	if err != nil {
 		return nil, service.NewBadRequestError(err)
 	}
-	return req, nil
+	return &req, nil
 }
 
 func convertUserResponse(user *model.User) *userResponse {
@@ -66,7 +66,7 @@ func convertListUserResponse(users []model.User) (res []*userResponse) {
 }
 
 func getUserByCreateRequest(c *gin.Context) (*model.User, error) {
-	var req *createRequest
+	var req createRequest
 	err := c.ShouldBindJSON(&req)
 	if err != nil {
 		return nil, service.NewBadRequestError(err)
@@ -75,7 +75,7 @@ func getUserByCreateRequest(c *gin.Context) (*model.User, error) {
 }
 
 func getUserByUpdateRequest(c *gin.Context, find *model.User) (*model.User, error) {
-	var req *updateRequest
+	var req updateRequest
 	err := c.ShouldBindJSON(&req)
 	if err != nil {
 		return nil, service.NewBadRequestError(err)

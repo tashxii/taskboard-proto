@@ -10,23 +10,37 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type endPoint struct {
+	boards      string
+	boardid     string
+	boardtasks  string
+	boardorders string
+	taskorders  string
+}
+
+// EndPoint presents boards endpoint
+var EndPoint = endPoint{
+	boards:      "/boards",
+	boardorders: "/boardorders",
+	boardid:     "boardid",
+}
+
 // RegisterRoute registers API endpoints for boards
-func RegisterRoute(route *gin.RouterGroup) (err error) {
-	route.GET("/boards", list)
-	route.POST("/boards", create)
-	route.GET("/boards/:boardid", get)
-	route.PUT("/boards/:boardid", update)
-	route.DELETE("/boards/:boardid", delete)
-	// route.GET("/boards/tasks/:boardid", getBoardTasks)
-	// route.PUT("/orders/boards", updateBoardOrders)
-	// route.PUT("/orders//tasks", updateBoardTaskOrders)
+func (p *endPoint) RegisterRoute(route *gin.RouterGroup) (err error) {
+	route.GET(p.boards, list)
+	route.POST(p.boards, create)
+	route.GET(p.boards+"/:"+p.boardid, get)
+	route.PUT(p.boards+"/:"+p.boardid, update)
+	route.DELETE(p.boards+"/:"+p.boardid, delete)
+	route.PUT(p.boardorders, updateBoardOrders)
 	return
 }
 
+// find all boards
 func list(c *gin.Context) {
 	tx := orm.GetDB() // No transction
 	srvc := service.NewBoardService(tx)
-	boards, serr := srvc.FindBoards([]string{"disp_order, created_date"})
+	boards, serr := srvc.FindBoards(&model.Board{}, []string{"disp_order, created_date"})
 	if serr != nil {
 		api.SetErrorStatus(c, serr)
 		return
@@ -61,6 +75,7 @@ func create(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, res)
 }
 
+// get a board
 func get(c *gin.Context) {
 	tx := orm.GetDB() // No transaction
 	srvc := service.NewBoardService(tx)
@@ -74,7 +89,7 @@ func get(c *gin.Context) {
 }
 
 func findBoardByPathParameter(c *gin.Context, srvc *service.BoardService) (find *model.Board, serr error) {
-	boardID, serr := api.GetPathParameter(c, "boardid")
+	boardID, serr := api.GetPathParameter(c, EndPoint.boardid)
 	if serr != nil {
 		api.SetErrorStatus(c, serr)
 		return nil, serr
@@ -87,6 +102,7 @@ func findBoardByPathParameter(c *gin.Context, srvc *service.BoardService) (find 
 	return
 }
 
+// update board
 func update(c *gin.Context) {
 	tx := orm.GetDB().Begin()
 	srvc := service.NewBoardService(tx)
@@ -119,6 +135,7 @@ func update(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, res)
 }
 
+// delete board
 func delete(c *gin.Context) {
 	tx := orm.GetDB().Begin()
 	srvc := service.NewBoardService(tx)
@@ -129,6 +146,29 @@ func delete(c *gin.Context) {
 	}
 	// delete board
 	serr := srvc.DeleteBoard(find)
+	if serr != nil {
+		api.Rollback(tx)
+		api.SetErrorStatus(c, serr)
+		return
+	}
+	serr = api.Commit(tx)
+	if serr != nil {
+		api.SetErrorStatus(c, serr)
+		return
+	}
+	c.Status(http.StatusOK)
+}
+
+// update order of all boards
+func updateBoardOrders(c *gin.Context) {
+	req, serr := getUpdateBoardOrdersRequest(c)
+	if serr != nil {
+		api.SetErrorStatus(c, serr)
+		return
+	}
+	tx := orm.GetDB().Begin()
+	srvc := service.NewBoardService(tx)
+	serr = srvc.UpdateBoardOrders(req.BoardIDs)
 	if serr != nil {
 		api.Rollback(tx)
 		api.SetErrorStatus(c, serr)

@@ -10,17 +10,15 @@ import (
 
 // TaskService provides apis for task management.
 type TaskService struct {
-	tx            *gorm.DB
-	taskRepo      *repository.TaskRepository
-	taskEntryRepo *repository.TaskEntryRepository
+	tx       *gorm.DB
+	taskRepo *repository.TaskRepository
 }
 
 // NewTaskService return new instance of TaskService.
 func NewTaskService(tx *gorm.DB) *TaskService {
 	return &TaskService{
-		tx:            tx,
-		taskRepo:      repository.NewTaskRepository(tx),
-		taskEntryRepo: repository.NewTaskEntryRepository(tx),
+		tx:       tx,
+		taskRepo: repository.NewTaskRepository(tx),
 	}
 }
 
@@ -37,8 +35,8 @@ func (s *TaskService) FindTask(condition interface{}) (*model.Task, error) {
 }
 
 // FindTasks finds all tasks
-func (s *TaskService) FindTasks(sortOrders []string) ([]model.Task, error) {
-	tasks, err := s.taskRepo.FindTasks(&model.Task{}, 0, orm.NoLimit, sortOrders)
+func (s *TaskService) FindTasks(condition interface{}, sortOrders []string) ([]model.Task, error) {
+	tasks, err := s.taskRepo.FindTasks(condition, 0, orm.NoLimit, sortOrders)
 	if err != nil {
 		return nil, NewSvcError(ErrorCodeDB, err, "Failed to find tasks")
 	}
@@ -47,7 +45,12 @@ func (s *TaskService) FindTasks(sortOrders []string) ([]model.Task, error) {
 
 // CreateTask creates new task
 func (s *TaskService) CreateTask(task *model.Task) error {
-	err := s.taskRepo.CreateTask(task)
+	max, err := s.taskRepo.MaxTaskDispOrder(&model.Task{BoardID: task.BoardID})
+	if err != nil {
+		return NewSvcError(ErrorCodeDB, err, "Failed to get max disp order")
+	}
+	task.DispOrder = max + 1
+	err = s.taskRepo.CreateTask(task)
 	if err != nil {
 		return NewSvcError(ErrorCodeDB, err, "Failed to create task")
 	}
@@ -69,9 +72,16 @@ func (s *TaskService) DeleteTask(task *model.Task) error {
 	if err != nil {
 		return NewSvcErrorf(ErrorCodeDB, err, "Failed to delete task. ID:%s", task.ID)
 	}
-	err = s.taskEntryRepo.DeleteTaskEntriesByTaskID(task.ID)
-	if err != nil {
-		return NewSvcErrorf(ErrorCodeDB, err, "Failed to delete task's entries. TaskID:%s", task.ID)
-	}
 	return nil
+}
+
+// UpdateTaskOrders changes display order of tasks.
+func (s *TaskService) UpdateTaskOrders(taskID, fromBoardID string, fromDispOrder int,
+	toBoardID string, toDispOrder int,
+) (err error) {
+	err = s.taskRepo.MoveTaskDispOrders(taskID, fromBoardID, fromDispOrder, toBoardID, toDispOrder)
+	if err != nil {
+		return
+	}
+	return
 }
